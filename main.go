@@ -146,9 +146,13 @@ type newFileMsg struct {
 }
 
 func newFileSelected(path string) tea.Cmd {
+	log.Println(path)
 	return func() tea.Msg {
 		contents, err := os.ReadFile(path)
-		return newFileMsg{path, string(contents), err}
+		if err != nil {
+			log.Println(err.Error())
+		}
+		return newFileMsg{path, string(contents[:]), err}
 	}
 }
 
@@ -205,11 +209,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = msg.Height - 20
 		m.viewport.Width = msg.Width
 	case newFileMsg:
-		log.Println("new file")
-		if msg.err != nil {
-			m.contents = msg.contents
-			m.currentFile = msg.path
-		}
+		m.contents = msg.contents
+		m.currentFile = msg.path
 	case errMsg:
 		m.err = msg.err
 		return m, nil
@@ -221,6 +222,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	if didSelect, path := m.filepicker.DidSelectFile(msg); didSelect {
+		log.Println(didSelect)
 		cmd := newFileSelected(path)
 		cmds = append(cmds, cmd)
 	}
@@ -241,6 +243,7 @@ func mainView(m model) string {
 	m.viewport.SetContent(glamourString)
 	s += m.viewport.View() + "\n\n"
 	s += help + "\n"
+	s += m.currentFile + "\n"
 	return lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, style.Render(s))
 }
 
@@ -253,6 +256,7 @@ func filesView(m model) string {
 	var s string
 	s += m.filepicker.View() + "\n\n"
 	s += help + "\n"
+	s += m.currentFile + "\n"
 	return lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, style.Render(s))
 }
 
