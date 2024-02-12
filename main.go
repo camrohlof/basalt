@@ -13,8 +13,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
-
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 type state int
@@ -95,6 +96,34 @@ type model struct {
 	state       state
 }
 
+type Config struct {
+	Root     string
+	LastFile string
+}
+
+func (m model) writeToConfig() tea.Cmd {
+	currentFile := m.currentFile
+	log.Println(currentFile)
+	return func() tea.Msg {
+		cfg := Config{
+			Root:     ".",
+			LastFile: currentFile,
+		}
+		log.Println(cfg.LastFile)
+		cfgFile, err := toml.Marshal(cfg)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println(string(cfgFile))
+		err = os.WriteFile("config.toml", cfgFile, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println("everthing worked")
+		return succMsg{nextCmd: tea.Quit}
+	}
+}
+
 func (m *model) switchModes(mode mode) {
 	switch mode {
 	case normal:
@@ -112,7 +141,7 @@ func (m *model) switchModes(mode mode) {
 
 type errMsg struct{ err error }
 
-type succMsg struct{}
+type succMsg struct{ nextCmd tea.Cmd }
 
 func writeToFile(value string) tea.Cmd {
 	return func() tea.Msg {
@@ -134,8 +163,8 @@ func openEditor(fileName string) tea.Cmd {
 	})
 }
 
-func getFirstFile() string {
-	out, _ := os.ReadFile("test.md")
+func getFirstFile(lastFile string) string {
+	out, _ := os.ReadFile(lastFile)
 	return string(out)
 }
 
@@ -156,8 +185,8 @@ func newFileSelected(path string) tea.Cmd {
 	}
 }
 
-func initialModel() model {
-	file := getFirstFile()
+func initialModel(cfg Config) model {
+	file := getFirstFile(cfg.LastFile)
 	vp := viewport.New(100, 100)
 	vp.SetContent(file)
 
@@ -167,7 +196,7 @@ func initialModel() model {
 	return model{
 		viewport:    vp,
 		filepicker:  fp,
-		currentFile: "test.md",
+		currentFile: cfg.LastFile,
 		contents:    file,
 		keymap:      getNormalKeyMaps(),
 		help:        help.New(),
@@ -188,7 +217,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.quit):
-			return m, tea.Quit
+			return m, m.writeToConfig()
 		case key.Matches(msg, m.keymap.editMode):
 			return m, openEditor(m.currentFile)
 		case key.Matches(msg, m.keymap.openFiles):
@@ -204,7 +233,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			log.Fatalf(msg.err.Error())
 		}
-		m.contents = getFirstFile()
+		m.contents = getFirstFile(m.currentFile)
 	case tea.WindowSizeMsg:
 		m.viewport.Height = msg.Height - 20
 		m.viewport.Width = msg.Width
@@ -214,6 +243,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg.err
 		return m, nil
+	case succMsg:
+		if msg.nextCmd != nil {
+			return m, msg.nextCmd
+		}
 	}
 	if m.state == initalizing {
 		m.state = viewer
@@ -238,43 +271,63 @@ func mainView(m model) string {
 		m.keymap.leader,
 	})
 	var s string
-	style := lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).PaddingLeft(10).PaddingRight(10)
-	glamourString, _ := glamour.Render(m.contents, "dark")
-	m.viewport.SetContent(glamourString)
-	s += m.viewport.View() + "\n\n"
-	s += help + "\n"
-	s += m.currentFile + "\n"
-	return lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, style.Render(s))
+	var style lipgloss.Style
+	var fullView string
+	if m.state == viewer {
+		style = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).PaddingLeft(10).PaddingRight(10).PaddingTop(1).MarginTop(5)
+		glamourString, _ := glamour.Render(m.contents, "dark")
+		m.viewport.SetContent(glamourString)
+		s += m.viewport.View() + "\n\n"
+		fullView = lipgloss.JoinHorizontal(lipgloss.Top, filesView(m), style.Render(s))
+	} else {
+		style = lipgloss.NewStyle().BorderStyle(lipgloss.HiddenBorder()).PaddingLeft(10).PaddingRight(10).PaddingTop(1).MarginTop(5)
+		glamourString, _ := glamour.Render(m.contents, "dark")
+		m.viewport.SetContent(glamourString)
+		s += m.viewport.View() + "\n\n"
+		fullView = lipgloss.JoinHorizontal(lipgloss.Top, filesView(m), style.Render(s))
+	}
+	//return lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, fullView)
+	return fmt.Sprintf("%s \n %s \n", fullView, help)
 }
 
 func filesView(m model) string {
-	help := m.help.ShortHelpView([]key.Binding{
-		m.keymap.quit,
-		m.keymap.normalMode,
-	})
-	style := lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).PaddingLeft(20).PaddingRight(20).PaddingTop(10).PaddingBottom(10)
+	var style lipgloss.Style
 	var s string
-	s += m.filepicker.View() + "\n\n"
-	s += help + "\n"
-	s += m.currentFile + "\n"
-	return lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, style.Render(s))
+	if m.state == fileExplorer {
+		style = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).PaddingLeft(5).PaddingRight(5).PaddingTop(3).PaddingBottom(10).MarginTop(5)
+		s += m.filepicker.View() + "\n\n"
+		s += fmt.Sprintf("Current file: %s \n", m.currentFile)
+	} else {
+		style = lipgloss.NewStyle().BorderStyle(lipgloss.HiddenBorder()).PaddingLeft(5).PaddingRight(5).PaddingTop(3).PaddingBottom(10).MarginTop(5)
+		s += m.filepicker.View() + "\n\n"
+		s += fmt.Sprintf("Current file: %s \n", m.currentFile)
+	}
+	//return lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, style.Render(s))
+	return style.Render(s)
 }
 
 func (m model) View() string {
 	if m.state == initalizing {
 		return "loading..."
 	}
-	switch m.state {
-	case viewer:
-		return mainView(m)
-	case fileExplorer:
-		return filesView(m)
-	default:
-		return "how did this happen?"
-	}
+	return mainView(m)
 }
 
 func main() {
+	var cfg Config
+	cfgFile, err := os.ReadFile("config.toml")
+	if err != nil {
+		cfg = Config{
+			Root:     ".",
+			LastFile: "new.md",
+		}
+	} else {
+		err = toml.Unmarshal([]byte(cfgFile), &cfg)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	f, err := tea.LogToFile("debug.log", "debug")
 	if err != nil {
 		fmt.Println("fatal:", err)
@@ -282,9 +335,10 @@ func main() {
 	}
 	defer f.Close()
 
-	p := tea.NewProgram(initialModel())
+	p := tea.NewProgram(initialModel(cfg))
 
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
 	}
+
 }

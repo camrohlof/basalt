@@ -7,7 +7,7 @@ require (
 	github.com/charmbracelet/bubbletea v0.25.0
 	github.com/charmbracelet/glamour v0.6.0
 	github.com/charmbracelet/lipgloss v0.9.1
-	github.com/fsnotify/fsnotify v1.7.0
+	github.com/pelletier/go-toml/v2 v2.1.1
 )
 
 require (
