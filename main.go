@@ -192,6 +192,11 @@ func initialModel(cfg Config) model {
 
 	fp := filepicker.New()
 	fp.AllowedTypes = []string{".md"}
+	fp.ShowHidden = false
+	fp.DirAllowed = true
+	fp.ShowPermissions = false
+	fp.ShowSize = false
+	fp.AutoHeight = false
 
 	return model{
 		viewport:    vp,
@@ -235,8 +240,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.contents = getFirstFile(m.currentFile)
 	case tea.WindowSizeMsg:
-		m.viewport.Height = msg.Height - 20
-		m.viewport.Width = msg.Width
+		m.viewport.Height = msg.Height - 10
+		m.filepicker.Height = m.viewport.Height - 10
+		m.viewport.Width = msg.Width - 40
 	case newFileMsg:
 		m.contents = msg.contents
 		m.currentFile = msg.path
@@ -274,18 +280,14 @@ func mainView(m model) string {
 	var style lipgloss.Style
 	var fullView string
 	if m.state == viewer {
-		style = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).PaddingLeft(10).PaddingRight(10).PaddingTop(1).MarginTop(5)
-		glamourString, _ := glamour.Render(m.contents, "dark")
-		m.viewport.SetContent(glamourString)
-		s += m.viewport.View() + "\n\n"
-		fullView = lipgloss.JoinHorizontal(lipgloss.Top, filesView(m), style.Render(s))
+		style = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).MarginTop(20)
 	} else {
-		style = lipgloss.NewStyle().BorderStyle(lipgloss.HiddenBorder()).PaddingLeft(10).PaddingRight(10).PaddingTop(1).MarginTop(5)
-		glamourString, _ := glamour.Render(m.contents, "dark")
-		m.viewport.SetContent(glamourString)
-		s += m.viewport.View() + "\n\n"
-		fullView = lipgloss.JoinHorizontal(lipgloss.Top, filesView(m), style.Render(s))
+		style = lipgloss.NewStyle().BorderStyle(lipgloss.HiddenBorder()).MarginTop(20)
 	}
+	glamourString, _ := glamour.Render(m.contents, "dark")
+	m.viewport.SetContent(glamourString)
+	s += m.viewport.View() + "\n\n"
+	fullView = lipgloss.JoinHorizontal(lipgloss.Center, filesView(m), style.Render(s))
 	//return lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, fullView)
 	return fmt.Sprintf("%s \n %s \n", fullView, help)
 }
@@ -294,14 +296,12 @@ func filesView(m model) string {
 	var style lipgloss.Style
 	var s string
 	if m.state == fileExplorer {
-		style = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).PaddingLeft(5).PaddingRight(5).PaddingTop(3).PaddingBottom(10).MarginTop(5)
-		s += m.filepicker.View() + "\n\n"
-		s += fmt.Sprintf("Current file: %s \n", m.currentFile)
+		style = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).MarginTop(20).PaddingLeft(5).PaddingRight(10)
 	} else {
-		style = lipgloss.NewStyle().BorderStyle(lipgloss.HiddenBorder()).PaddingLeft(5).PaddingRight(5).PaddingTop(3).PaddingBottom(10).MarginTop(5)
-		s += m.filepicker.View() + "\n\n"
-		s += fmt.Sprintf("Current file: %s \n", m.currentFile)
+		style = lipgloss.NewStyle().BorderStyle(lipgloss.HiddenBorder()).MarginTop(20).PaddingLeft(5).PaddingRight(10)
 	}
+	s += m.filepicker.View() + "\n\n"
+
 	//return lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, style.Render(s))
 	return style.Render(s)
 }
