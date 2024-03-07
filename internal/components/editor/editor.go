@@ -1141,6 +1141,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case pasteErrMsg:
 		m.Err = msg
+	case keyComboTimeoutMsg:
+		clear(m.commandBuffer)
 	}
 	var vp viewport.Model
 	vp, cmd = m.viewport.Update(msg)
