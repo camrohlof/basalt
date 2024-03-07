@@ -1,7 +1,8 @@
 *.log
 *.tape
-test.md 
+test.md
 test2.md
 vimsidian
 basalt
 config.toml
+/bin
